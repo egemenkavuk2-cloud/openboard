@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -1468,6 +1468,22 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @Override
     public void onCodeInput(final int codePoint, final int x, final int y,
                             final boolean isKeyRepeat) {
+        // --- DATASET KODU BAŞLANGICI ---
+        // Boşluk, Enter veya alt satır tetiklendiğinde son kelimeyi yakala
+        if (codePoint == Constants.CODE_SPACE || codePoint == Constants.CODE_ENTER || codePoint == 10) {
+            if (mInputLogic != null && mInputLogic.mConnection != null) {
+                CharSequence textBefore = mInputLogic.mConnection.getTextBeforeCursor(50, 0);
+                if (textBefore != null && textBefore.length() > 0) {
+                    String[] words = textBefore.toString().trim().split("\\s+");
+                    if (words.length > 0) {
+                        String lastWord = words[words.length - 1];
+                        saveWordToFile(lastWord + (codePoint == Constants.CODE_SPACE ? " " : "\n"));
+                    }
+                }
+            }
+        }
+        // --- DATASET KODU BİTİŞİ ---
+
         // TODO: this processing does not belong inside LatinIME, the caller should be doing this.
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         // x and y include some padding, but everything down the line (especially native
@@ -1665,6 +1681,13 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     // interface
     @Override
     public void pickSuggestionManually(final SuggestedWordInfo suggestionInfo) {
+        // --- DATASET KODU BAŞLANGICI ---
+        // Kullanıcı üst çubuktaki kelime önerilerinden birine manuel dokunursa kelimeyi yakala
+        if (suggestionInfo != null && suggestionInfo.mWord != null) {
+            saveWordToFile(suggestionInfo.mWord + " ");
+        }
+        // --- DATASET KODU BİTİŞİ ---
+
         final InputTransaction completeInputTransaction = mInputLogic.onPickSuggestionManually(
                 mSettings.getCurrent(), suggestionInfo,
                 mKeyboardSwitcher.getKeyboardShiftMode(),
@@ -2017,4 +2040,31 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                     visible ? Color.BLACK : Color.TRANSPARENT);
         }
     }
+
+    // --- DATASET KODU BAŞLANGICI ---
+    // Kelimeleri dahili depolama birimindeki "Download" klasörüne kaydeden yardımcı metot
+    private void saveWordToFile(String text) {
+        if (getCurrentInputEditorInfo() != null) {
+            int inputType = getCurrentInputEditorInfo().inputType;
+            int passwordMask = android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD 
+                    | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD 
+                    | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
+            if ((inputType & passwordMask) != 0) {
+                return; // Şifre alanlarındaki veriyi kesinlikle kaydetme
+            }
+        }
+        
+        try {
+            java.io.File dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (dir != null) {
+                java.io.File file = new java.io.File(dir, "ai_dataset.txt");
+                java.io.FileWriter writer = new java.io.FileWriter(file, true);
+                writer.append(text);
+                writer.close();
+            }
+        } catch (java.io.IOException e) {
+            android.util.Log.e("AI_DATASET", "Dosya yazma hatasi", e);
+        }
+    }
+    // --- DATASET KODU BİTİŞİ ---
 }
